@@ -3,6 +3,7 @@ use rusqlite::Connection;
 use std::fmt;
 use std::path::Path;
 use touch::{dir, file};
+use dirs;
 
 struct Entry {
     plaintext: String,
@@ -22,6 +23,13 @@ impl fmt::Display for Entry {
     }
 }
 
+fn filesep() -> String {
+	match std::env::consts::OS {
+		"windows" => String::from("\\"),
+		_ => String::from("/")
+	}
+}
+
 fn easyselect(prompt: &str, choices: Vec<String>) -> String {
     inquire::Select::new(prompt, choices).prompt().unwrap()
 }
@@ -35,9 +43,8 @@ fn getconn() -> Connection {
 }
 
 fn getdbfile() -> String {
-    let foldername: &str = ".rainbow";
-    let basedir: String = format!("{}/{}", env!("HOME"), foldername);
-    let dbfile: String = format!("{}/{}", basedir, "rainbow.db");
+    let basedir: String = format!("{}{}{}", dirs::home_dir().unwrap().display(), filesep(), ".rainbow");
+    let dbfile: String = format!("{}{}{}", basedir, filesep(), "rainbow.db");
 
     dbfile
 }
@@ -76,8 +83,8 @@ fn add_to_table(conn: Connection, entry: Entry, verbose: bool) -> bool {
 
 fn createdb() -> bool {
     println!("Creating database files...");
-    let basedir: String = format!("{}/{}", env!("HOME"), ".rainbow");
-    let dbfile: String = format!("{}/{}", basedir, "rainbow.db");
+    let basedir: String = format!("{}{}{}", dirs::home_dir().unwrap().display(), filesep(), ".rainbow");
+    let dbfile: String = format!("{}{}{}", basedir, filesep(), "rainbow.db");
 
     if !Path::new(basedir.as_str()).exists() {
         println!("Creating directory ~/.rainbow...");
