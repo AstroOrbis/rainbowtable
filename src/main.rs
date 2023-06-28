@@ -1,10 +1,9 @@
 use hashy::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::blocking::Client;
-use rusqlite::Connection;
-use std::fmt;
-use std::path::Path;
+use std::{fmt, path::Path, fs};
 use touch::{dir, file};
+use rusqlite::{Connection};
 
 struct Entry {
 	plaintext: String,
@@ -127,7 +126,7 @@ fn createdb() -> bool {
 		}
 	}
 
-	Connection::open(getdbfile())
+	Connection::open(dbfile)
 		.unwrap()
 		.execute(
 			"CREATE TABLE IF NOT EXISTS rainbow (
@@ -144,6 +143,46 @@ fn createdb() -> bool {
 	true
 }
 
+fn import_list(body: String) {
+	let lines: Vec<&str> = body.lines().collect();
+	let total_lines = lines.len();
+	let mut skipped = 0;
+
+	// Create a progress bar
+	let progress_bar = ProgressBar::new(total_lines as u64);
+	progress_bar.set_style(
+		ProgressStyle::default_bar()
+			.template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} ({percent}%)")
+			.unwrap(),
+	);
+
+	let mut count = 0;
+	for line in lines {
+		if !line.is_empty() {
+			if add_to_table(
+				Connection::open(getdbfile()).unwrap(),
+				construct_entry(line.to_string()),
+				false,
+			) {
+				count += 1;
+			} else {
+				skipped += 1;
+			}
+		}
+
+		// Update the progress bar and fraction
+		progress_bar.set_position(count as u64);
+		let msg = format!("{}/{}", count, total_lines);
+		progress_bar.set_message(msg);
+	}
+
+	progress_bar.finish_with_message("Processing complete.");
+	println!(
+		"Added {} entries to the rainbow table (skipped {}).",
+		count, skipped
+	);
+}
+
 fn main() {
 	if !Path::new(getdbfile().as_str()).exists() {
 		createdb();
@@ -156,8 +195,9 @@ fn main() {
 	let opts = vec![
 		String::from("Add string to rainbow table"),
 		String::from("Lookup string in rainbow table"),
-		String::from("Add remote file list to rainbow table"),
-		String::from("Get count of entries in rainbow table")
+		String::from("Add remote file to rainbow table"),
+		String::from("Add local file to rainbow table"),
+		String::from("Get count of entries in rainbow table"),
 	];
 
 	match easyselect("What would you like to do?", opts.clone()) {
@@ -213,49 +253,19 @@ fn main() {
 			let url = easyinq("Enter the URL of the file (Will parse on each newline):");
 			let client = Client::new();
 			let response = client.get(url).send().unwrap();
-
-			// Read the lines from the downloaded file
-			let body: String = response.text().unwrap();
-			let lines: Vec<&str> = body.lines().collect();
-			let total_lines = lines.len();
-			let mut skipped = 0;
-
-			// Create a progress bar
-			let progress_bar = ProgressBar::new(total_lines as u64);
-			progress_bar.set_style(
-				ProgressStyle::default_bar()
-					.template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} ({percent}%)")
-					.unwrap(),
-			);
-
-			let mut count = 0;
-			for line in lines {
-				if !line.is_empty() {
-					if add_to_table(
-						Connection::open(getdbfile()).unwrap(),
-						construct_entry(line.to_string()),
-						false,
-					) {
-						count += 1;
-					} else {
-						skipped += 1;
-					}
-				}
-
-				// Update the progress bar and fraction
-				progress_bar.set_position(count as u64);
-				let msg = format!("{}/{}", count, total_lines);
-				progress_bar.set_message(msg);
-			}
-
-			progress_bar.finish_with_message("Processing complete.");
-			println!(
-				"Added {} entries to the rainbow table (skipped {}).",
-				count, skipped
-			);
+			import_list(response.text().unwrap());
 		}
 
 		choice if choice == opts[3] => {
+			let strpath = easyinq("Enter the full path to the file (Will parse on each newline)");
+			let body = String::from_utf8_lossy(&fs::read(strpath).unwrap())
+				.parse()
+				.unwrap();
+
+			import_list(body);
+		}
+
+		choice if choice == opts[4] => {
 			let count: isize = conn
 				.prepare("SELECT COUNT(*) FROM rainbow")
 				.unwrap()
