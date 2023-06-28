@@ -1,9 +1,10 @@
 use hashy::*;
+use indicatif::{ProgressBar, ProgressStyle};
+use reqwest::blocking::Client;
 use rusqlite::Connection;
 use std::fmt;
 use std::path::Path;
 use touch::{dir, file};
-use dirs;
 
 struct Entry {
     plaintext: String,
@@ -24,10 +25,10 @@ impl fmt::Display for Entry {
 }
 
 fn filesep() -> String {
-	match std::env::consts::OS {
-		"windows" => String::from("\\"),
-		_ => String::from("/")
-	}
+    match std::env::consts::OS {
+        "windows" => String::from("\\"),
+        _ => String::from("/"),
+    }
 }
 
 fn easyselect(prompt: &str, choices: Vec<String>) -> String {
@@ -38,12 +39,13 @@ fn easyinq(prompt: &str) -> String {
     inquire::Text::new(prompt).prompt().unwrap()
 }
 
-fn getconn() -> Connection {
-    Connection::open(getdbfile()).unwrap()
-}
-
 fn getdbfile() -> String {
-    let basedir: String = format!("{}{}{}", dirs::home_dir().unwrap().display(), filesep(), ".rainbow");
+    let basedir: String = format!(
+        "{}{}{}",
+        dirs::home_dir().unwrap().display(),
+        filesep(),
+        ".rainbow"
+    );
     let dbfile: String = format!("{}{}{}", basedir, filesep(), "rainbow.db");
 
     dbfile
@@ -61,8 +63,27 @@ fn construct_entry(plaintext: String) -> Entry {
 
 fn add_to_table(conn: Connection, entry: Entry, verbose: bool) -> bool {
     if verbose {
-        println!("Adding {} to the rainbow table...", entry.plaintext);
+        println!("Adding \"{}\" to the rainbow table...", entry.plaintext);
     }
+
+    let exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM rainbow WHERE plaintext = ?1",
+            [&entry.plaintext],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    if exists > 0 {
+        if verbose {
+            println!(
+                "Entry with plaintext \"{}\" already exists in the rainbow table.",
+                entry.plaintext
+            );
+        }
+        return false;
+    }
+
     conn.execute(
         "INSERT INTO rainbow (plaintext, md5, sha1, sha256, sha512) VALUES (?1, ?2, ?3, ?4, ?5)",
         [
@@ -74,16 +95,23 @@ fn add_to_table(conn: Connection, entry: Entry, verbose: bool) -> bool {
         ],
     )
     .unwrap();
+
     if verbose {
         println!("Added an entry to the rainbow table:");
         println!("{}", entry);
     }
+
     true
 }
 
 fn createdb() -> bool {
     println!("Creating database files...");
-    let basedir: String = format!("{}{}{}", dirs::home_dir().unwrap().display(), filesep(), ".rainbow");
+    let basedir: String = format!(
+        "{}{}{}",
+        dirs::home_dir().unwrap().display(),
+        filesep(),
+        ".rainbow"
+    );
     let dbfile: String = format!("{}{}{}", basedir, filesep(), "rainbow.db");
 
     if !Path::new(basedir.as_str()).exists() {
@@ -106,7 +134,8 @@ fn createdb() -> bool {
         }
     }
 
-    getconn()
+    Connection::open(getdbfile())
+        .unwrap()
         .execute(
             "CREATE TABLE IF NOT EXISTS rainbow (
             plaintext TEXT PRIMARY KEY,
@@ -129,11 +158,12 @@ fn main() {
 
     println!("Welcome to RainbowTable v{}", env!("CARGO_PKG_VERSION"));
 
-    let conn = getconn();
+    let conn = Connection::open(getdbfile()).unwrap();
 
     let opts = vec![
         String::from("Add string to rainbow table"),
         String::from("Lookup string in rainbow table"),
+        String::from("Add remote file list to rainbow table"),
     ];
 
     match easyselect("What would you like to do?", opts.clone()) {
@@ -184,6 +214,53 @@ fn main() {
 
             println!("\n{}", entry);
         }
+
+        choice if choice == opts[2] => {
+            let url = easyinq("Enter the URL of the file (Will parse on each newline):");
+            let client = Client::new();
+            let response = client.get(url).send().unwrap();
+
+            // Read the lines from the downloaded file
+            let body: String = response.text().unwrap();
+            let lines: Vec<&str> = body.lines().collect();
+            let total_lines = lines.len();
+            let mut skipped = 0;
+
+            // Create a progress bar
+            let progress_bar = ProgressBar::new(total_lines as u64);
+            progress_bar.set_style(
+                ProgressStyle::default_bar()
+                    .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} ({percent}%)")
+                    .unwrap(),
+            );
+
+            let mut count = 0;
+            for line in lines {
+                if !line.is_empty() {
+                    if add_to_table(
+                        Connection::open(getdbfile()).unwrap(),
+                        construct_entry(line.to_string()),
+                        false,
+                    ) {
+                        count += 1;
+                    } else {
+                        skipped += 1;
+                    }
+                }
+
+                // Update the progress bar and fraction
+                progress_bar.set_position(count as u64);
+                let msg = format!("{}/{}", count, total_lines);
+                progress_bar.set_message(msg);
+            }
+
+            progress_bar.finish_with_message("Processing complete.");
+            println!(
+                "Added {} entries to the rainbow table (skipped {}).",
+                count, skipped
+            );
+        }
+
         _ => panic!("Invalid choice"),
     }
 }
