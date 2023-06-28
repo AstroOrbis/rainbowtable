@@ -164,6 +164,7 @@ fn main() {
 		String::from("Add string to rainbow table"),
 		String::from("Lookup string in rainbow table"),
 		String::from("Add remote file list to rainbow table"),
+		String::from("Get count of entries in rainbow table")
 	];
 
 	match easyselect("What would you like to do?", opts.clone()) {
@@ -259,6 +260,16 @@ fn main() {
 				"Added {} entries to the rainbow table (skipped {}).",
 				count, skipped
 			);
+		}
+
+		choice if choice == opts[3] => {
+			let count: isize = conn
+				.prepare("SELECT COUNT(*) FROM rainbow")
+				.unwrap()
+				.query_row([], |row| row.get(0))
+				.unwrap();
+
+			println!("There are {} entries in the rainbow table.", count);
 		}
 
 		_ => panic!("Invalid choice"),

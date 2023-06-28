@@ -1,6 +1,6 @@
 [package]
 name = "rainbowtable"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 license = "MIT"
 description = "A simple command-line tool to assist in the creation and use of rainbow tables."
