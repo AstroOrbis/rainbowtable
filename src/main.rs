@@ -24,13 +24,6 @@ impl fmt::Display for Entry {
 	}
 }
 
-fn filesep() -> String {
-	match std::env::consts::OS {
-		"windows" => String::from("\\"),
-		_ => String::from("/"),
-	}
-}
-
 fn easyselect(prompt: &str, choices: Vec<String>) -> String {
 	inquire::Select::new(prompt, choices).prompt().unwrap()
 }
@@ -43,10 +36,10 @@ fn getdbfile() -> String {
 	let basedir: String = format!(
 		"{}{}{}",
 		dirs::home_dir().unwrap().display(),
-		filesep(),
+		std::path::MAIN_SEPARATOR,
 		".rainbow"
 	);
-	let dbfile: String = format!("{}{}{}", basedir, filesep(), "rainbow.db");
+	let dbfile: String = format!("{}{}{}", basedir, std::path::MAIN_SEPARATOR, "rainbow.db");
 
 	dbfile
 }
@@ -109,10 +102,10 @@ fn createdb() -> bool {
 	let basedir: String = format!(
 		"{}{}{}",
 		dirs::home_dir().unwrap().display(),
-		filesep(),
+		std::path::MAIN_SEPARATOR,
 		".rainbow"
 	);
-	let dbfile: String = format!("{}{}{}", basedir, filesep(), "rainbow.db");
+	let dbfile: String = format!("{}{}{}", basedir, std::path::MAIN_SEPARATOR, "rainbow.db");
 
 	if !Path::new(basedir.as_str()).exists() {
 		println!("Creating directory ~/.rainbow...");
