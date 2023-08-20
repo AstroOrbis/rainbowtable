@@ -20,8 +20,8 @@ Once again, Wikipedia:
 
 ```text
 A hash function is any function that can be used to map data of arbitrary size to fixed-size values, though there are some hash functions that support variable length output.
+```
 
-```text
 And once again, in layman's terms, a hash function takes data of any size and converts it to a fixed size. Since data is most likely either lost or padded in some way, hash functions relied upon to be **one way and irreversible**. A rainbow table aims to fix that by letting you look up a hash and get its plaintext value.
 
 ### Cool, how do I use this?
